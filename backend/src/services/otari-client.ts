@@ -55,3 +55,10 @@ export async function executeCode(code: string, container?: string): Promise<{ o
     body: JSON.stringify({ code, container }),
   });
 }
+
+export async function webSearch(query: string): Promise<{ results: Array<{ title: string; url: string; snippet: string }> }> {
+  return request('/search', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  });
+}

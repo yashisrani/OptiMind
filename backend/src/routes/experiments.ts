@@ -12,6 +12,7 @@ import {
 import { getOptimizationHistory } from '../services/optimization-history';
 import { getGuardrailRules, updateGuardrailRules } from '../services/guardrails';
 import { analyzeExperiment } from '../services/analysis-service';
+import { searchOptimizationTechniques, searchPromptEngineeringTips } from '../services/search-service';
 
 const router = Router();
 
@@ -109,6 +110,26 @@ router.post('/:id/analyze', async (req, res) => {
     res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to analyze';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/:id/search/techniques', async (req, res) => {
+  try {
+    const result = await searchOptimizationTechniques(req.params.id);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to search';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/:id/search/tips', async (req, res) => {
+  try {
+    const result = await searchPromptEngineeringTips(req.params.id);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to search';
     res.status(500).json({ error: message });
   }
 });

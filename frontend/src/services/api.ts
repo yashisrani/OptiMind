@@ -69,6 +69,14 @@ export async function analyzeExperiment(id: string) {
   });
 }
 
+export async function searchOptimizationTechniques(id: string) {
+  return request(`/experiments/${id}/search/techniques`);
+}
+
+export async function searchPromptEngineeringTips(id: string) {
+  return request(`/experiments/${id}/search/tips`);
+}
+
 export async function runExperiment(
   id: string,
   input: string

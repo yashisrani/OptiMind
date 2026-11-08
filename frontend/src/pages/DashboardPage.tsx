@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory, analyzeExperiment } from '@/services/api';
+import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory, analyzeExperiment, searchOptimizationTechniques, searchPromptEngineeringTips } from '@/services/api';
 import type { Experiment } from '../../../shared/src';
 
 interface VariantComparison {
@@ -34,10 +34,13 @@ export function DashboardPage() {
   const [optimization, setOptimization] = useState<{ suggestions: any[]; bestVariant: string } | null>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [analysis, setAnalysis] = useState<any>(null);
+  const [techniques, setTechniques] = useState<any>(null);
+  const [tips, setTips] = useState<any>(null);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<{ response: string; variant: string; latency: number; tokens: number; cost: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     loadExperiments();
@@ -88,12 +91,40 @@ export function DashboardPage() {
     }
   };
 
+  const handleSearchTechniques = async () => {
+    if (!selectedExperiment) return;
+    setSearching(true);
+    try {
+      const data = await searchOptimizationTechniques(selectedExperiment.id);
+      setTechniques(data);
+    } catch (error) {
+      console.error('Failed to search techniques:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSearchTips = async () => {
+    if (!selectedExperiment) return;
+    setSearching(true);
+    try {
+      const data = await searchPromptEngineeringTips(selectedExperiment.id);
+      setTips(data);
+    } catch (error) {
+      console.error('Failed to search tips:', error);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const handleSelectExperiment = (exp: Experiment) => {
     setSelectedExperiment(exp);
     loadComparison(exp.id);
     loadOptimization(exp.id);
     loadHistory(exp.id);
     setAnalysis(null);
+    setTechniques(null);
+    setTips(null);
   };
 
   const handleRun = async () => {
@@ -434,6 +465,59 @@ export function DashboardPage() {
                   </table>
                 </div>
               )}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {selectedExperiment && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <CardTitle>Web Search</CardTitle>
+                <CardDescription>Find optimization techniques via Otari Web Search</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSearchTechniques} disabled={searching} variant="outline">
+                  {searching ? 'Searching...' : 'Search Techniques'}
+                </Button>
+                <Button onClick={handleSearchTips} disabled={searching} variant="outline">
+                  {searching ? 'Searching...' : 'Search Tips'}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          {techniques && (
+            <CardContent className="mb-4">
+              <h3 className="font-medium mb-3">Optimization Techniques</h3>
+              <p className="text-sm text-muted-foreground mb-3">Query: {techniques.query}</p>
+              <div className="space-y-3">
+                {techniques.techniques.map((tech: any, index: number) => (
+                  <div key={index} className="p-3 rounded-lg border border-border">
+                    <a href={tech.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                      {tech.title}
+                    </a>
+                    <p className="text-sm text-muted-foreground mt-1">{tech.summary}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+          {tips && (
+            <CardContent>
+              <h3 className="font-medium mb-3">Prompt Engineering Tips for {tips.bestModel}</h3>
+              <p className="text-sm text-muted-foreground mb-3">Query: {tips.query}</p>
+              <div className="space-y-3">
+                {tips.tips.map((tip: any, index: number) => (
+                  <div key={index} className="p-3 rounded-lg border border-border">
+                    <a href={tip.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+                      {tip.title}
+                    </a>
+                    <p className="text-sm text-muted-foreground mt-1">{tip.summary}</p>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           )}
         </Card>
