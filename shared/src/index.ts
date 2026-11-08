@@ -1,5 +1,3 @@
-// Shared types for AgentForge
-
 export interface ExperimentVariant {
   id: string;
   name: string;

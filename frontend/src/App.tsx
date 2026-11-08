@@ -1,59 +1,44 @@
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { CreateExperimentPage } from '@/pages/CreateExperimentPage';
+import { DashboardPage } from '@/pages/DashboardPage';
+
+type Page = 'dashboard' | 'create';
 
 function App() {
+  const [page, setPage] = useState<Page>('dashboard');
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
-      <div className="container mx-auto px-4 py-8">
-        <header className="mb-12 text-center">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">
-            🤖 AgentForge
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            Self-Optimizing AI Agent powered by Otari
-          </p>
-        </header>
-
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-          <Card>
-            <CardHeader>
-              <CardTitle>A/B Testing</CardTitle>
-              <CardDescription>Test prompt variants</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button>Create Experiment</Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Performance</CardTitle>
-              <CardDescription>Track metrics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">$0.00</p>
-              <p className="text-sm text-muted-foreground">Total Cost</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Optimization</CardTitle>
-              <CardDescription>AI suggestions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-3xl font-bold">0</p>
-              <p className="text-sm text-muted-foreground">Active Suggestions</p>
-            </CardContent>
-          </Card>
+      <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold">OptiMind</h1>
+            <div className="flex gap-2">
+              <Button
+                variant={page === 'dashboard' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setPage('dashboard')}
+              >
+                Dashboard
+              </Button>
+              <Button
+                variant={page === 'create' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setPage('create')}
+              >
+                Create Experiment
+              </Button>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">Powered by Otari</p>
         </div>
+      </nav>
 
-        <footer className="mt-12 text-center text-sm text-muted-foreground">
-          <p>Built with Otari AI Gateway • Mozilla Hackathon 2026</p>
-        </footer>
-      </div>
+      {page === 'dashboard' && <DashboardPage />}
+      {page === 'create' && <CreateExperimentPage onCreated={() => setPage('dashboard')} />}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

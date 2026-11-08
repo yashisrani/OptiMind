@@ -1,8 +1,8 @@
 {
-  "name": "agentforge",
+  "name": "optimind",
   "version": "1.0.0",
   "private": true,
-  "description": "Self-Optimizing AI Agent powered by Otari",
+  "description": "Self-optimizing AI agent powered by Otari",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",

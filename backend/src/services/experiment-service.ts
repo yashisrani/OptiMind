@@ -1,0 +1,139 @@
+import { chatCompletion } from './otari-client';
+import type { Experiment, ExperimentVariant, ExperimentResult } from '../../shared/src';
+
+const experiments = new Map<string, Experiment>();
+
+export function createExperiment(
+  name: string,
+  description: string,
+  variants: Omit<ExperimentVariant, 'id'>[],
+  budget: number
+): Experiment {
+  const id = `exp_${Date.now()}`;
+  
+  const experiment: Experiment = {
+    id,
+    name,
+    description,
+    variants: variants.map((v, i) => ({ ...v, id: `${id}_v${i}` })),
+    budget,
+    spent: 0,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    results: variants.map((_, i) => ({
+      variantId: `${id}_v${i}`,
+      requests: 0,
+      totalTokens: 0,
+      totalCost: 0,
+      avgLatency: 0,
+      successRate: 100,
+      lastUpdated: new Date().toISOString(),
+    })),
+  };
+
+  experiments.set(id, experiment);
+  return experiment;
+}
+
+export function getExperiment(id: string): Experiment | undefined {
+  return experiments.get(id);
+}
+
+export function listExperiments(): Experiment[] {
+  return Array.from(experiments.values());
+}
+
+export async function runExperiment(
+  experimentId: string,
+  input: string
+): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number }> {
+  const experiment = experiments.get(experimentId);
+  if (!experiment) throw new Error('Experiment not found');
+  if (experiment.status !== 'active') throw new Error('Experiment is not active');
+
+  const variant = selectVariant(experiment);
+  const startTime = Date.now();
+
+  const response = await chatCompletion({
+    model: variant.model,
+    messages: [
+      { role: 'system', content: variant.prompt },
+      { role: 'user', content: input },
+    ],
+    temperature: variant.temperature,
+  });
+
+  const latency = Date.now() - startTime;
+  const tokens = response.usage.total_tokens;
+  const cost = estimateCost(response.usage, variant.model);
+
+  updateResult(experiment, variant.id, tokens, cost, latency);
+
+  return {
+    response: response.choices[0].message.content,
+    variant,
+    latency,
+    tokens,
+  };
+}
+
+function selectVariant(experiment: Experiment): ExperimentVariant {
+  const totalRequests = experiment.results.reduce((sum, r) => sum + r.requests, 0);
+  
+  if (totalRequests < experiment.variants.length * 10) {
+    const leastTested = experiment.results
+      .sort((a, b) => a.requests - b.requests)[0];
+    return experiment.variants.find(v => v.id === leastTested.variantId)!;
+  }
+
+  const best = experiment.results
+    .filter(r => r.successRate > 80)
+    .sort((a, b) => {
+      const aEfficiency = a.successRate / (a.totalCost || 1);
+      const bEfficiency = b.successRate / (b.totalCost || 1);
+      return bEfficiency - aEfficiency;
+    })[0];
+
+  if (!best) return experiment.variants[0];
+  return experiment.variants.find(v => v.id === best.variantId)!;
+}
+
+function updateResult(
+  experiment: Experiment,
+  variantId: string,
+  tokens: number,
+  cost: number,
+  latency: number
+): void {
+  const result = experiment.results.find(r => r.variantId === variantId);
+  if (!result) return;
+
+  result.requests += 1;
+  result.totalTokens += tokens;
+  result.totalCost += cost;
+  result.avgLatency = (result.avgLatency * (result.requests - 1) + latency) / result.requests;
+  result.lastUpdated = new Date().toISOString();
+
+  experiment.spent += cost;
+
+  if (experiment.spent >= experiment.budget * 0.95) {
+    experiment.status = 'completed';
+  }
+}
+
+function estimateCost(usage: { prompt_tokens: number; completion_tokens: number }, model: string): number {
+  const pricing: Record<string, { input: number; output: number }> = {
+    'gpt-4': { input: 30, output: 60 },
+    'gpt-4o': { input: 5, output: 15 },
+    'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
+    'claude-3-opus': { input: 15, output: 75 },
+    'claude-3-sonnet': { input: 3, output: 15 },
+    'claude-3-haiku': { input: 0.25, output: 1.25 },
+  };
+
+  const modelPricing = pricing[model] || { input: 1, output: 2 };
+  const inputCost = (usage.prompt_tokens / 1_000_000) * modelPricing.input;
+  const outputCost = (usage.completion_tokens / 1_000_000) * modelPricing.output;
+  
+  return inputCost + outputCost;
+}
