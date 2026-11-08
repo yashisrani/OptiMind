@@ -3,8 +3,7 @@ import type { Experiment, ExperimentVariant, ExperimentResult } from '../../shar
 import type { Budget } from '../types/otari';
 import { logExperimentCreated, logModelSwitch, logBudgetAlert } from './optimization-history';
 import { checkBudgetGuardrail, checkModelGuardrail, checkPromptGuardrail } from './guardrails';
-
-const experiments = new Map<string, Experiment>();
+import { getDatabase } from './database';
 
 export function createExperiment(
   name: string,
@@ -12,8 +11,35 @@ export function createExperiment(
   variants: Omit<ExperimentVariant, 'id'>[],
   budget: number
 ): Experiment {
+  const db = getDatabase();
   const id = `exp_${Date.now()}`;
   
+  const insertExperiment = db.prepare(`
+    INSERT INTO experiments (id, name, description, budget, status)
+    VALUES (?, ?, ?, ?, 'active')
+  `);
+  
+  const insertVariant = db.prepare(`
+    INSERT INTO variants (id, experiment_id, name, prompt, model, temperature)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  
+  const insertResult = db.prepare(`
+    INSERT INTO results (variant_id, requests, total_tokens, total_cost, avg_latency, success_rate)
+    VALUES (?, 0, 0, 0, 0, 100)
+  `);
+
+  const transaction = db.transaction(() => {
+    insertExperiment.run(id, name, description, budget);
+    variants.forEach((v, i) => {
+      const variantId = `${id}_v${i}`;
+      insertVariant.run(variantId, id, v.name, v.prompt, v.model, v.temperature || 0.7);
+      insertResult.run(variantId);
+    });
+  });
+
+  transaction();
+
   const experiment: Experiment = {
     id,
     name,
@@ -34,24 +60,87 @@ export function createExperiment(
     })),
   };
 
-  experiments.set(id, experiment);
   logExperimentCreated(id, experiment);
   return experiment;
 }
 
 export function getExperiment(id: string): Experiment | undefined {
-  return experiments.get(id);
+  const db = getDatabase();
+  
+  const experiment = db.prepare('SELECT * FROM experiments WHERE id = ?').get(id) as any;
+  if (!experiment) return undefined;
+
+  const variants = db.prepare('SELECT * FROM variants WHERE experiment_id = ?').all(id) as any[];
+  const results = db.prepare('SELECT * FROM results WHERE variant_id IN (SELECT id FROM variants WHERE experiment_id = ?)').all(id) as any[];
+
+  return {
+    id: experiment.id,
+    name: experiment.name,
+    description: experiment.description,
+    budget: experiment.budget,
+    spent: experiment.spent,
+    status: experiment.status,
+    createdAt: experiment.created_at,
+    variants: variants.map(v => ({
+      id: v.id,
+      name: v.name,
+      prompt: v.prompt,
+      model: v.model,
+      temperature: v.temperature,
+    })),
+    results: results.map(r => ({
+      variantId: r.variant_id,
+      requests: r.requests,
+      totalTokens: r.total_tokens,
+      totalCost: r.total_cost,
+      avgLatency: r.avg_latency,
+      successRate: r.success_rate,
+      lastUpdated: r.last_updated,
+    })),
+  };
 }
 
 export function listExperiments(): Experiment[] {
-  return Array.from(experiments.values());
+  const db = getDatabase();
+  const experiments = db.prepare('SELECT * FROM experiments ORDER BY created_at DESC').all() as any[];
+  
+  return experiments.map(exp => {
+    const variants = db.prepare('SELECT * FROM variants WHERE experiment_id = ?').all(exp.id) as any[];
+    const results = db.prepare('SELECT * FROM results WHERE variant_id IN (SELECT id FROM variants WHERE experiment_id = ?)').all(exp.id) as any[];
+    
+    return {
+      id: exp.id,
+      name: exp.name,
+      description: exp.description,
+      budget: exp.budget,
+      spent: exp.spent,
+      status: exp.status,
+      createdAt: exp.created_at,
+      variants: variants.map(v => ({
+        id: v.id,
+        name: v.name,
+        prompt: v.prompt,
+        model: v.model,
+        temperature: v.temperature,
+      })),
+      results: results.map(r => ({
+        variantId: r.variant_id,
+        requests: r.requests,
+        totalTokens: r.total_tokens,
+        totalCost: r.total_cost,
+        avgLatency: r.avg_latency,
+        successRate: r.success_rate,
+        lastUpdated: r.last_updated,
+      })),
+    };
+  });
 }
 
 export async function runExperiment(
   experimentId: string,
   input: string
 ): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number }> {
-  const experiment = experiments.get(experimentId);
+  const experiment = getExperiment(experimentId);
   if (!experiment) throw new Error('Experiment not found');
   if (experiment.status !== 'active') throw new Error('Experiment is not active');
 
@@ -131,19 +220,36 @@ function updateResult(
   cost: number,
   latency: number
 ): void {
+  const db = getDatabase();
+  
   const result = experiment.results.find(r => r.variantId === variantId);
   if (!result) return;
 
-  result.requests += 1;
-  result.totalTokens += tokens;
-  result.totalCost += cost;
-  result.avgLatency = (result.avgLatency * (result.requests - 1) + latency) / result.requests;
-  result.lastUpdated = new Date().toISOString();
+  const newRequests = result.requests + 1;
+  const newTotalTokens = result.totalTokens + tokens;
+  const newTotalCost = result.totalCost + cost;
+  const newAvgLatency = (result.avgLatency * result.requests + latency) / newRequests;
 
-  experiment.spent += cost;
+  const updateResult = db.prepare(`
+    UPDATE results 
+    SET requests = ?, total_tokens = ?, total_cost = ?, avg_latency = ?, last_updated = CURRENT_TIMESTAMP
+    WHERE variant_id = ?
+  `);
+  
+  const updateExperiment = db.prepare(`
+    UPDATE experiments SET spent = spent + ? WHERE id = ?
+  `);
 
-  if (experiment.spent >= experiment.budget * 0.95) {
-    experiment.status = 'completed';
+  const transaction = db.transaction(() => {
+    updateResult.run(newRequests, newTotalTokens, newTotalCost, newAvgLatency, variantId);
+    updateExperiment.run(cost, experiment.id);
+  });
+
+  transaction();
+
+  const updatedExperiment = getExperiment(experiment.id);
+  if (updatedExperiment && updatedExperiment.spent >= updatedExperiment.budget * 0.95) {
+    db.prepare('UPDATE experiments SET status = ? WHERE id = ?').run('completed', experiment.id);
   }
 }
 
@@ -165,7 +271,7 @@ function calculateCost(usage: { prompt_tokens: number; completion_tokens: number
 }
 
 export function getVariantComparison(experimentId: string) {
-  const experiment = experiments.get(experimentId);
+  const experiment = getExperiment(experimentId);
   if (!experiment) throw new Error('Experiment not found');
 
   const totalRequests = experiment.results.reduce((sum, r) => sum + r.requests, 0);
@@ -208,7 +314,7 @@ export function getVariantComparison(experimentId: string) {
 }
 
 export function getOptimizationSuggestions(experimentId: string) {
-  const experiment = experiments.get(experimentId);
+  const experiment = getExperiment(experimentId);
   if (!experiment) throw new Error('Experiment not found');
 
   const suggestions = [];
