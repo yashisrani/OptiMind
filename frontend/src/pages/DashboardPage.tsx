@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory } from '@/services/api';
+import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory, analyzeExperiment } from '@/services/api';
 import type { Experiment } from '../../../shared/src';
 
 interface VariantComparison {
@@ -33,9 +33,11 @@ export function DashboardPage() {
   const [comparison, setComparison] = useState<ComparisonData | null>(null);
   const [optimization, setOptimization] = useState<{ suggestions: any[]; bestVariant: string } | null>(null);
   const [history, setHistory] = useState<any[]>([]);
+  const [analysis, setAnalysis] = useState<any>(null);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<{ response: string; variant: string; latency: number; tokens: number; cost: number } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     loadExperiments();
@@ -73,11 +75,25 @@ export function DashboardPage() {
     }
   };
 
+  const handleAnalyze = async () => {
+    if (!selectedExperiment) return;
+    setAnalyzing(true);
+    try {
+      const data = await analyzeExperiment(selectedExperiment.id);
+      setAnalysis(data);
+    } catch (error) {
+      console.error('Failed to analyze:', error);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const handleSelectExperiment = (exp: Experiment) => {
     setSelectedExperiment(exp);
     loadComparison(exp.id);
     loadOptimization(exp.id);
     loadHistory(exp.id);
+    setAnalysis(null);
   };
 
   const handleRun = async () => {
@@ -366,6 +382,60 @@ export function DashboardPage() {
               ))}
             </div>
           </CardContent>
+        </Card>
+      )}
+
+      {selectedExperiment && (
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>AI Analysis</CardTitle>
+                <CardDescription>Python-powered metric analysis via Otari Code Execution</CardDescription>
+              </div>
+              <Button onClick={handleAnalyze} disabled={analyzing}>
+                {analyzing ? 'Analyzing...' : 'Run Analysis'}
+              </Button>
+            </div>
+          </CardHeader>
+          {analysis && (
+            <CardContent>
+              {analysis.best && (
+                <div className="mb-4 p-4 rounded-lg bg-green-50 border border-green-200">
+                  <h3 className="font-medium text-green-900">Best Variant (by Efficiency)</h3>
+                  <p className="text-sm text-green-700">{analysis.best}</p>
+                </div>
+              )}
+              {analysis.ranking && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-3">Rank</th>
+                        <th className="text-left py-2 px-3">Variant</th>
+                        <th className="text-left py-2 px-3">Model</th>
+                        <th className="text-right py-2 px-3">Efficiency</th>
+                        <th className="text-right py-2 px-3">Cost</th>
+                        <th className="text-right py-2 px-3">Requests</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analysis.ranking.map((item: any, index: number) => (
+                        <tr key={index} className="border-b">
+                          <td className="py-2 px-3 font-bold">{index + 1}</td>
+                          <td className="py-2 px-3 font-medium">{item.name}</td>
+                          <td className="py-2 px-3 text-muted-foreground">{item.model}</td>
+                          <td className="py-2 px-3 text-right">{item.efficiency.toFixed(4)}</td>
+                          <td className="py-2 px-3 text-right">${item.cost.toFixed(4)}</td>
+                          <td className="py-2 px-3 text-right">{item.requests}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          )}
         </Card>
       )}
     </div>

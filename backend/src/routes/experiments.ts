@@ -11,6 +11,7 @@ import {
 } from '../services/experiment-service';
 import { getOptimizationHistory } from '../services/optimization-history';
 import { getGuardrailRules, updateGuardrailRules } from '../services/guardrails';
+import { analyzeExperiment } from '../services/analysis-service';
 
 const router = Router();
 
@@ -98,6 +99,16 @@ router.put('/:id/guardrails', (req, res) => {
     res.json({ success: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update guardrails';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post('/:id/analyze', async (req, res) => {
+  try {
+    const result = await analyzeExperiment(req.params.id);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to analyze';
     res.status(500).json({ error: message });
   }
 });

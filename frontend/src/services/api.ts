@@ -63,6 +63,12 @@ export async function updateGuardrailRules(id: string, rules: any[]) {
   });
 }
 
+export async function analyzeExperiment(id: string) {
+  return request(`/experiments/${id}/analyze`, {
+    method: 'POST',
+  });
+}
+
 export async function runExperiment(
   id: string,
   input: string

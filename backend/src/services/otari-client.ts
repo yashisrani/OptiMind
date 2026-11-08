@@ -48,3 +48,10 @@ export async function getUsageSeries(bucket: 'hour' | 'day' = 'day', startDate?:
 export async function getBudgets(): Promise<Array<{ id: string; name: string; limit: number; spent: number; period: string }>> {
   return request('/budgets');
 }
+
+export async function executeCode(code: string, container?: string): Promise<{ output: string; exit_code: number }> {
+  return request('/code/execute', {
+    method: 'POST',
+    body: JSON.stringify({ code, container }),
+  });
+}
