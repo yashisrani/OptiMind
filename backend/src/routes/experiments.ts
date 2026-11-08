@@ -116,6 +116,39 @@ router.post('/:id/analyze', async (req, res) => {
   }
 });
 
+router.post('/:id/analyze-stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const send = (data: any) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    send({ type: 'info', message: 'Initializing analysis engine...' });
+    await new Promise(r => setTimeout(r, 600));
+
+    send({ type: 'info', message: 'Fetching experiment data from SQLite...' });
+    const experiment = getExperiment(req.params.id);
+    if (!experiment) throw new Error('Experiment not found');
+    await new Promise(r => setTimeout(r, 600));
+
+    send({ type: 'info', message: 'Generating Python analysis script...' });
+    await new Promise(r => setTimeout(r, 600));
+
+    send({ type: 'info', message: 'Executing code via Otari Sandbox...' });
+    const result = await analyzeExperiment(req.params.id);
+    await new Promise(r => setTimeout(r, 600));
+
+    send({ type: 'info', message: 'Analysis complete.' });
+    send({ type: 'result', data: result });
+  } catch (error) {
+    send({ type: 'error', message: (error as Error).message });
+  } finally {
+    res.end();
+  }
+});
+
 router.get('/:id/search/techniques', async (req, res) => {
   try {
     const result = await searchOptimizationTechniques(req.params.id);

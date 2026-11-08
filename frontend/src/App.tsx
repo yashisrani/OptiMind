@@ -5,8 +5,9 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { GuardrailsPage } from '@/pages/GuardrailsPage';
 import { TelemetryPage } from '@/pages/TelemetryPage';
 import { TracesPage } from '@/pages/TracesPage';
+import { RoutingPage } from '@/pages/RoutingPage';
 
-type Page = 'dashboard' | 'create' | 'guardrails' | 'telemetry' | 'traces';
+type Page = 'dashboard' | 'create' | 'guardrails' | 'telemetry' | 'traces' | 'routing';
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard');
@@ -53,6 +54,13 @@ function App() {
               >
                 Traces
               </Button>
+              <Button
+                variant={page === 'routing' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setPage('routing')}
+              >
+                Routing
+              </Button>
             </div>
           </div>
           <p className="text-sm text-muted-foreground">Powered by Otari</p>
@@ -64,6 +72,7 @@ function App() {
       {page === 'guardrails' && <GuardrailsPage />}
       {page === 'telemetry' && <TelemetryPage />}
       {page === 'traces' && <TracesPage />}
+      {page === 'routing' && <RoutingPage />}
     </div>
   );
 }
