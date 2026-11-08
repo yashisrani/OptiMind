@@ -77,6 +77,15 @@ export async function searchPromptEngineeringTips(id: string) {
   return request(`/experiments/${id}/search/tips`);
 }
 
+export async function getTelemetryMetrics(startDate?: string, endDate?: string) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request(`/experiments/telemetry${query}`);
+}
+
 export async function runExperiment(
   id: string,
   input: string

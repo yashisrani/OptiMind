@@ -13,6 +13,7 @@ import { getOptimizationHistory } from '../services/optimization-history';
 import { getGuardrailRules, updateGuardrailRules } from '../services/guardrails';
 import { analyzeExperiment } from '../services/analysis-service';
 import { searchOptimizationTechniques, searchPromptEngineeringTips } from '../services/search-service';
+import { getTelemetryMetrics } from '../services/telemetry-service';
 
 const router = Router();
 
@@ -130,6 +131,26 @@ router.get('/:id/search/tips', async (req, res) => {
     res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to search';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/telemetry', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const metrics = await getTelemetryMetrics(
+      startDate as string | undefined,
+      endDate as string | undefined
+    );
+    
+    if (!metrics) {
+      res.status(500).json({ error: 'Failed to fetch telemetry' });
+      return;
+    }
+    
+    res.json(metrics);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get telemetry';
     res.status(500).json({ error: message });
   }
 });

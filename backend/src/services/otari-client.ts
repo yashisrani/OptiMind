@@ -62,3 +62,39 @@ export async function webSearch(query: string): Promise<{ results: Array<{ title
     body: JSON.stringify({ query }),
   });
 }
+
+export async function getAgentTelemetry(startDate?: string, endDate?: string): Promise<{
+  outcomes: {
+    commits: number;
+    pull_requests: number;
+    lines_of_code: number;
+    active_time: number;
+  };
+  behavior: {
+    tool_calls: number;
+    tool_accepts: number;
+    tool_rejects: number;
+    turns: number;
+    api_errors: number;
+  };
+  measures: {
+    cost_per_commit: number | null;
+    cost_per_pull_request: number | null;
+    cost_per_line: number | null;
+    spend_per_active_hour: number | null;
+    tool_acceptance_rate: number | null;
+    error_rate: number | null;
+    turns_per_session: number | null;
+  };
+  usage: {
+    cost: number;
+    requests: number;
+  };
+}> {
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return request(`/agent-telemetry/summary${query}`);
+}
