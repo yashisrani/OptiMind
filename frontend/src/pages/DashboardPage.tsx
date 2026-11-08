@@ -133,6 +133,9 @@ export function DashboardPage() {
     try {
       const res = await runExperiment(selectedExperiment.id, input);
       setResult({ response: res.response, variant: res.variant.name, latency: res.latency, tokens: res.tokens, cost: res.cost });
+      if (res.switched) {
+        alert(`Auto-switched to ${res.variant.model} for better efficiency`);
+      }
       await loadExperiments();
       await loadComparison(selectedExperiment.id);
     } catch (err) {

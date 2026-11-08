@@ -97,7 +97,7 @@ export async function getTraceById(traceId: string) {
 export async function runExperiment(
   id: string,
   input: string
-): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number }> {
+): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number; switched?: boolean }> {
   return request(`/experiments/${id}/run`, {
     method: 'POST',
     body: JSON.stringify({ input }),

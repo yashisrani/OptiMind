@@ -139,7 +139,7 @@ export function listExperiments(): Experiment[] {
 export async function runExperiment(
   experimentId: string,
   input: string
-): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number }> {
+): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number; switched?: boolean }> {
   const experiment = getExperiment(experimentId);
   if (!experiment) throw new Error('Experiment not found');
   if (experiment.status !== 'active') throw new Error('Experiment is not active');
@@ -150,7 +150,15 @@ export async function runExperiment(
     throw new Error(budgetCheck.reason);
   }
 
-  const variant = selectVariant(experiment);
+  let variant = selectVariant(experiment);
+  let switched = false;
+  
+  const switchCandidate = autoSwitchModel(experiment);
+  if (switchCandidate && switchCandidate.id !== variant.id) {
+    variant = switchCandidate;
+    switched = true;
+    logModelSwitch(experimentId, variant.model, switchCandidate.model, 0);
+  }
   
   const modelCheck = checkModelGuardrail(variant.model);
   if (!modelCheck.allowed) {
@@ -189,6 +197,7 @@ export async function runExperiment(
     latency,
     tokens,
     cost,
+    switched,
   };
 }
 
@@ -211,6 +220,34 @@ function selectVariant(experiment: Experiment): ExperimentVariant {
 
   if (!best) return experiment.variants[0];
   return experiment.variants.find(v => v.id === best.variantId)!;
+}
+
+function autoSwitchModel(experiment: Experiment): ExperimentVariant | null {
+  if (experiment.results.length < 2) return null;
+  
+  const variants = experiment.results.map(r => {
+    const v = experiment.variants.find(v => v.id === r.variantId);
+    return { ...r, variant: v };
+  });
+
+  const best = variants.reduce((best, curr) =>
+    (curr.successRate / (curr.totalCost || 1)) > (best.successRate / (best.totalCost || 1)) ? curr : best
+  );
+
+  const worst = variants.reduce((worst, curr) =>
+    (curr.successRate / (curr.totalCost || 1)) < (worst.successRate / (worst.totalCost || 1)) ? curr : worst
+  );
+
+  if (worst.requests < 5) return null;
+  
+  const bestEfficiency = best.successRate / (best.totalCost || 1);
+  const worstEfficiency = worst.successRate / (worst.totalCost || 1);
+  
+  if (bestEfficiency > worstEfficiency * 1.5) {
+    return worst.variant || null;
+  }
+  
+  return null;
 }
 
 function updateResult(
