@@ -6,8 +6,11 @@ import {
   listExperiments,
   runExperiment,
   getVariantComparison,
+  getOptimizationSuggestions,
   getOtariBudgets,
 } from '../services/experiment-service';
+import { getOptimizationHistory } from '../services/optimization-history';
+import { getGuardrailRules, updateGuardrailRules } from '../services/guardrails';
 
 const router = Router();
 
@@ -56,6 +59,46 @@ router.get('/:id/comparison', (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get comparison';
     res.status(404).json({ error: message });
+  }
+});
+
+router.get('/:id/optimize', (req, res) => {
+  try {
+    const suggestions = getOptimizationSuggestions(req.params.id);
+    res.json(suggestions);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get suggestions';
+    res.status(404).json({ error: message });
+  }
+});
+
+router.get('/:id/history', (req, res) => {
+  try {
+    const history = getOptimizationHistory(req.params.id);
+    res.json(history);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get history';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/guardrails', (_req, res) => {
+  const rules = getGuardrailRules();
+  res.json(rules);
+});
+
+router.get('/:id/guardrails', (req, res) => {
+  const rules = getGuardrailRules(req.params.id);
+  res.json(rules);
+});
+
+router.put('/:id/guardrails', (req, res) => {
+  try {
+    updateGuardrailRules(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update guardrails';
+    res.status(500).json({ error: message });
   }
 });
 

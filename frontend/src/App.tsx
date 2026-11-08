@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CreateExperimentPage } from '@/pages/CreateExperimentPage';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { GuardrailsPage } from '@/pages/GuardrailsPage';
 
-type Page = 'dashboard' | 'create';
+type Page = 'dashboard' | 'create' | 'guardrails';
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard');
@@ -29,6 +30,13 @@ function App() {
               >
                 Create Experiment
               </Button>
+              <Button
+                variant={page === 'guardrails' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setPage('guardrails')}
+              >
+                Guardrails
+              </Button>
             </div>
           </div>
           <p className="text-sm text-muted-foreground">Powered by Otari</p>
@@ -37,6 +45,7 @@ function App() {
 
       {page === 'dashboard' && <DashboardPage />}
       {page === 'create' && <CreateExperimentPage onCreated={() => setPage('dashboard')} />}
+      {page === 'guardrails' && <GuardrailsPage />}
     </div>
   );
 }

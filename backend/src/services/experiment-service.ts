@@ -1,6 +1,8 @@
 import { chatCompletion, getUsage, getBudgets } from './otari-client';
 import type { Experiment, ExperimentVariant, ExperimentResult } from '../../shared/src';
 import type { Budget } from '../types/otari';
+import { logExperimentCreated, logModelSwitch, logBudgetAlert } from './optimization-history';
+import { checkBudgetGuardrail, checkModelGuardrail, checkPromptGuardrail } from './guardrails';
 
 const experiments = new Map<string, Experiment>();
 
@@ -33,6 +35,7 @@ export function createExperiment(
   };
 
   experiments.set(id, experiment);
+  logExperimentCreated(id, experiment);
   return experiment;
 }
 
@@ -52,7 +55,24 @@ export async function runExperiment(
   if (!experiment) throw new Error('Experiment not found');
   if (experiment.status !== 'active') throw new Error('Experiment is not active');
 
+  const budgetCheck = checkBudgetGuardrail(experiment);
+  if (!budgetCheck.allowed) {
+    logBudgetAlert(experimentId, experiment.spent, experiment.budget);
+    throw new Error(budgetCheck.reason);
+  }
+
   const variant = selectVariant(experiment);
+  
+  const modelCheck = checkModelGuardrail(variant.model);
+  if (!modelCheck.allowed) {
+    throw new Error(modelCheck.reason);
+  }
+
+  const promptCheck = checkPromptGuardrail(variant.prompt);
+  if (!promptCheck.allowed) {
+    throw new Error(promptCheck.reason);
+  }
+
   const startTime = Date.now();
 
   const response = await chatCompletion({
@@ -69,6 +89,10 @@ export async function runExperiment(
   const cost = calculateCost(response.usage, variant.model);
 
   updateResult(experiment, variant.id, tokens, cost, latency);
+
+  if (budgetCheck.reason) {
+    logBudgetAlert(experimentId, experiment.spent, experiment.budget);
+  }
 
   return {
     response: response.choices[0].message.content,
@@ -181,6 +205,39 @@ export function getVariantComparison(experimentId: string) {
     budget: experiment.budget,
     budgetUtilization: (experiment.spent / experiment.budget) * 100,
   };
+}
+
+export function getOptimizationSuggestions(experimentId: string) {
+  const experiment = experiments.get(experimentId);
+  if (!experiment) throw new Error('Experiment not found');
+
+  const suggestions = [];
+  const variants = experiment.results.map(r => {
+    const v = experiment.variants.find(v => v.id === r.variantId);
+    return { ...r, variant: v };
+  });
+
+  const best = variants.reduce((best, curr) =>
+    (curr.successRate / (curr.totalCost || 1)) > (best.successRate / (best.totalCost || 1)) ? curr : best
+  );
+
+  variants.forEach(v => {
+    if (v.variantId !== best.variantId && v.requests > 2) {
+      const currentCostPerReq = v.totalCost / v.requests;
+      const bestCostPerReq = best.totalCost / best.requests;
+      const potentialSavings = ((currentCostPerReq - bestCostPerReq) * v.requests).toFixed(4);
+      
+      suggestions.push({
+        type: 'model_switch',
+        from: v.variant?.model,
+        to: best.variant?.model,
+        reason: `${best.variant?.name} has higher efficiency than ${v.variant?.name}`,
+        estimatedSavings: potentialSavings
+      });
+    }
+  });
+
+  return { suggestions, bestVariant: best.variant?.name };
 }
 
 export async function getOtariBudgets(): Promise<Budget[]> {

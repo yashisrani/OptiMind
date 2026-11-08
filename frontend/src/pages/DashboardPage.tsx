@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { listExperiments, runExperiment, getVariantComparison } from '@/services/api';
+import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory } from '@/services/api';
 import type { Experiment } from '../../../shared/src';
 
 interface VariantComparison {
@@ -31,6 +31,8 @@ export function DashboardPage() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [selectedExperiment, setSelectedExperiment] = useState<Experiment | null>(null);
   const [comparison, setComparison] = useState<ComparisonData | null>(null);
+  const [optimization, setOptimization] = useState<{ suggestions: any[]; bestVariant: string } | null>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<{ response: string; variant: string; latency: number; tokens: number; cost: number } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,9 +55,29 @@ export function DashboardPage() {
     }
   };
 
+  const loadOptimization = async (experimentId: string) => {
+    try {
+      const data = await getOptimizationSuggestions(experimentId);
+      setOptimization(data);
+    } catch (error) {
+      console.error('Failed to load optimization:', error);
+    }
+  };
+
+  const loadHistory = async (experimentId: string) => {
+    try {
+      const data = await getOptimizationHistory(experimentId);
+      setHistory(data);
+    } catch (error) {
+      console.error('Failed to load history:', error);
+    }
+  };
+
   const handleSelectExperiment = (exp: Experiment) => {
     setSelectedExperiment(exp);
     loadComparison(exp.id);
+    loadOptimization(exp.id);
+    loadHistory(exp.id);
   };
 
   const handleRun = async () => {
@@ -266,6 +288,82 @@ export function DashboardPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {optimization && optimization.suggestions.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Optimization Suggestions</CardTitle>
+            <CardDescription>AI-powered recommendations to improve efficiency</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 rounded-lg bg-green-50 border border-green-200">
+              <h3 className="font-medium text-green-900">Best Performing Variant</h3>
+              <p className="text-sm text-green-700">{optimization.bestVariant}</p>
+            </div>
+
+            {optimization.suggestions.map((suggestion, index) => (
+              <div key={index} className="p-4 rounded-lg border border-border">
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="font-medium">Switch Model</h3>
+                  <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">
+                    Save ${suggestion.estimatedSavings}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mb-2">{suggestion.reason}</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-destructive">{suggestion.from}</span>
+                  <span>→</span>
+                  <span className="text-green-600 font-medium">{suggestion.to}</span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {history.length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Optimization Journey</CardTitle>
+            <CardDescription>Timeline of optimization events</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {history.map((event, index) => (
+                <div key={index} className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className={`w-3 h-3 rounded-full ${
+                      event.type === 'model_switch' ? 'bg-blue-500' :
+                      event.type === 'budget_alert' ? 'bg-yellow-500' :
+                      event.type === 'efficiency_gain' ? 'bg-green-500' :
+                      'bg-gray-500'
+                    }`} />
+                    {index < history.length - 1 && <div className="w-px h-full bg-border mt-1" />}
+                  </div>
+                  <div className="flex-1 pb-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-medium text-sm">{event.description}</h3>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(event.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    {event.metadata.savings && (
+                      <p className="text-xs text-muted-foreground">
+                        Savings: ${event.metadata.savings.toFixed(4)}
+                      </p>
+                    )}
+                    {event.metadata.efficiency && (
+                      <p className="text-xs text-muted-foreground">
+                        Efficiency: {event.metadata.efficiency.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

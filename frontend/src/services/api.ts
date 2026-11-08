@@ -43,6 +43,26 @@ export async function getVariantComparison(id: string) {
   return request(`/experiments/${id}/comparison`);
 }
 
+export async function getOptimizationSuggestions(id: string) {
+  return request(`/experiments/${id}/optimize`);
+}
+
+export async function getOptimizationHistory(id: string) {
+  return request(`/experiments/${id}/history`);
+}
+
+export async function getGuardrailRules(id?: string) {
+  const endpoint = id ? `/experiments/${id}/guardrails` : '/experiments/guardrails';
+  return request(endpoint);
+}
+
+export async function updateGuardrailRules(id: string, rules: any[]) {
+  return request(`/experiments/${id}/guardrails`, {
+    method: 'PUT',
+    body: JSON.stringify(rules),
+  });
+}
+
 export async function runExperiment(
   id: string,
   input: string
