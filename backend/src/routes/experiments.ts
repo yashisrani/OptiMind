@@ -14,6 +14,7 @@ import { getGuardrailRules, updateGuardrailRules } from '../services/guardrails'
 import { analyzeExperiment } from '../services/analysis-service';
 import { searchOptimizationTechniques, searchPromptEngineeringTips } from '../services/search-service';
 import { getTelemetryMetrics } from '../services/telemetry-service';
+import { fetchTraces, fetchTraceDetail } from '../services/traces-service';
 
 const router = Router();
 
@@ -151,6 +152,31 @@ router.get('/telemetry', async (req, res) => {
     res.json(metrics);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get telemetry';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/traces', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const traces = await fetchTraces(limit);
+    res.json(traces);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch traces';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/traces/:traceId', async (req, res) => {
+  try {
+    const trace = await fetchTraceDetail(req.params.traceId);
+    if (!trace) {
+      res.status(404).json({ error: 'Trace not found' });
+      return;
+    }
+    res.json(trace);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch trace';
     res.status(500).json({ error: message });
   }
 });

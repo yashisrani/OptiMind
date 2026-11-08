@@ -86,6 +86,14 @@ export async function getTelemetryMetrics(startDate?: string, endDate?: string) 
   return request(`/experiments/telemetry${query}`);
 }
 
+export async function getTraces(limit: number = 50) {
+  return request(`/experiments/traces?limit=${limit}`);
+}
+
+export async function getTraceById(traceId: string) {
+  return request(`/experiments/traces/${traceId}`);
+}
+
 export async function runExperiment(
   id: string,
   input: string

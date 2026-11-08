@@ -98,3 +98,43 @@ export async function getAgentTelemetry(startDate?: string, endDate?: string): P
   const query = params.toString() ? `?${params.toString()}` : '';
   return request(`/agent-telemetry/summary${query}`);
 }
+
+export async function getTraces(limit: number = 50): Promise<Array<{
+  id: string;
+  session_id: string;
+  model: string;
+  duration_ms: number;
+  cost: number;
+  tokens: number;
+  status: string;
+  created_at: string;
+  turns: number;
+  tool_calls: number;
+}>> {
+  return request(`/traces?limit=${limit}`);
+}
+
+export async function getTraceById(traceId: string): Promise<{
+  id: string;
+  session_id: string;
+  model: string;
+  duration_ms: number;
+  cost: number;
+  tokens: number;
+  status: string;
+  created_at: string;
+  turns: Array<{
+    id: string;
+    model: string;
+    duration_ms: number;
+    cost: number;
+    tokens: number;
+    tool_calls: Array<{
+      name: string;
+      duration_ms: number;
+      status: string;
+    }>;
+  }>;
+}> {
+  return request(`/traces/${traceId}`);
+}

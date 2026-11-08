@@ -4,8 +4,9 @@ import { CreateExperimentPage } from '@/pages/CreateExperimentPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { GuardrailsPage } from '@/pages/GuardrailsPage';
 import { TelemetryPage } from '@/pages/TelemetryPage';
+import { TracesPage } from '@/pages/TracesPage';
 
-type Page = 'dashboard' | 'create' | 'guardrails' | 'telemetry';
+type Page = 'dashboard' | 'create' | 'guardrails' | 'telemetry' | 'traces';
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard');
@@ -45,6 +46,13 @@ function App() {
               >
                 Telemetry
               </Button>
+              <Button
+                variant={page === 'traces' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setPage('traces')}
+              >
+                Traces
+              </Button>
             </div>
           </div>
           <p className="text-sm text-muted-foreground">Powered by Otari</p>
@@ -55,6 +63,7 @@ function App() {
       {page === 'create' && <CreateExperimentPage onCreated={() => setPage('dashboard')} />}
       {page === 'guardrails' && <GuardrailsPage />}
       {page === 'telemetry' && <TelemetryPage />}
+      {page === 'traces' && <TracesPage />}
     </div>
   );
 }
