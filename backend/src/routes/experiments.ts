@@ -181,6 +181,32 @@ router.get('/traces/:traceId', async (req, res) => {
   }
 });
 
+router.get('/:id/export', (req, res) => {
+  const experiment = getExperiment(req.params.id);
+  if (!experiment) {
+    res.status(404).json({ error: 'Experiment not found' });
+    return;
+  }
+
+  const history = getOptimizationHistory(req.params.id);
+
+  let csv = 'Type,ID,Name,Model,Requests,Total Cost,Avg Latency,Success Rate,Total Tokens\n';
+  experiment.results.forEach(r => {
+    const v = experiment.variants.find(v => v.id === r.variantId);
+    csv += `Result,${r.variantId},"${v?.name || ''}","${v?.model || ''}",${r.requests},${r.totalCost},${r.avgLatency},${r.successRate},${r.totalTokens}\n`;
+  });
+
+  csv += '\nType,Timestamp,Event,Description,Metadata\n';
+  history.forEach(h => {
+    const meta = JSON.stringify(h.metadata).replace(/"/g, '""');
+    csv += `Event,${h.timestamp},${h.type},"${h.description.replace(/"/g, '""')}","${meta}"\n`;
+  });
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename=optimind-experiment-${experiment.id}.csv`);
+  res.send(csv);
+});
+
 router.post('/:id/run', async (req, res) => {
   try {
     const { input } = z.object({ input: z.string() }).parse(req.body);

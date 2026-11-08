@@ -146,6 +146,14 @@ export function DashboardPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold">Dashboard</h1>
+        {selectedExperiment && (
+          <Button
+            variant="outline"
+            onClick={() => window.open(`/api/experiments/${selectedExperiment.id}/export`, '_blank')}
+          >
+            Export CSV
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-4 mb-8">
