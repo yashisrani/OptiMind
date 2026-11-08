@@ -1,5 +1,6 @@
-import { chatCompletion } from './otari-client';
+import { chatCompletion, getUsage, getBudgets } from './otari-client';
 import type { Experiment, ExperimentVariant, ExperimentResult } from '../../shared/src';
+import type { Budget } from '../types/otari';
 
 const experiments = new Map<string, Experiment>();
 
@@ -46,7 +47,7 @@ export function listExperiments(): Experiment[] {
 export async function runExperiment(
   experimentId: string,
   input: string
-): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number }> {
+): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number }> {
   const experiment = experiments.get(experimentId);
   if (!experiment) throw new Error('Experiment not found');
   if (experiment.status !== 'active') throw new Error('Experiment is not active');
@@ -65,7 +66,7 @@ export async function runExperiment(
 
   const latency = Date.now() - startTime;
   const tokens = response.usage.total_tokens;
-  const cost = estimateCost(response.usage, variant.model);
+  const cost = calculateCost(response.usage, variant.model);
 
   updateResult(experiment, variant.id, tokens, cost, latency);
 
@@ -74,6 +75,7 @@ export async function runExperiment(
     variant,
     latency,
     tokens,
+    cost,
   };
 }
 
@@ -121,7 +123,7 @@ function updateResult(
   }
 }
 
-function estimateCost(usage: { prompt_tokens: number; completion_tokens: number }, model: string): number {
+function calculateCost(usage: { prompt_tokens: number; completion_tokens: number }, model: string): number {
   const pricing: Record<string, { input: number; output: number }> = {
     'gpt-4': { input: 30, output: 60 },
     'gpt-4o': { input: 5, output: 15 },
@@ -136,4 +138,60 @@ function estimateCost(usage: { prompt_tokens: number; completion_tokens: number 
   const outputCost = (usage.completion_tokens / 1_000_000) * modelPricing.output;
   
   return inputCost + outputCost;
+}
+
+export function getVariantComparison(experimentId: string) {
+  const experiment = experiments.get(experimentId);
+  if (!experiment) throw new Error('Experiment not found');
+
+  const totalRequests = experiment.results.reduce((sum, r) => sum + r.requests, 0);
+  
+  const comparisons = experiment.variants.map(variant => {
+    const result = experiment.results.find(r => r.variantId === variant.id);
+    if (!result) return null;
+
+    const costPerRequest = result.requests > 0 ? result.totalCost / result.requests : 0;
+    const efficiency = costPerRequest > 0 ? result.successRate / (costPerRequest * 1000) : 0;
+    const shareOfRequests = totalRequests > 0 ? (result.requests / totalRequests) * 100 : 0;
+
+    return {
+      variantId: variant.id,
+      name: variant.name,
+      model: variant.model,
+      requests: result.requests,
+      totalCost: result.totalCost,
+      avgLatency: result.avgLatency,
+      totalTokens: result.totalTokens,
+      successRate: result.successRate,
+      costPerRequest,
+      efficiency,
+      shareOfRequests,
+    };
+  }).filter(Boolean);
+
+  const bestVariant = comparisons.reduce((best, current) => 
+    current.efficiency > best.efficiency ? current : best
+  , comparisons[0]);
+
+  return {
+    variants: comparisons,
+    bestVariant: bestVariant?.variantId,
+    totalRequests,
+    totalCost: experiment.spent,
+    budget: experiment.budget,
+    budgetUtilization: (experiment.spent / experiment.budget) * 100,
+  };
+}
+
+export async function getOtariBudgets(): Promise<Budget[]> {
+  try {
+    const budgets = await getBudgets();
+    return budgets.map(b => ({
+      ...b,
+      status: b.spent / b.limit < 0.8 ? 'green' : b.spent / b.limit < 1 ? 'yellow' : 'red',
+    }));
+  } catch (error) {
+    console.error('Failed to fetch Otari budgets:', error);
+    return [];
+  }
 }

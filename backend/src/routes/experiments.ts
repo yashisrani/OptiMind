@@ -5,6 +5,8 @@ import {
   getExperiment,
   listExperiments,
   runExperiment,
+  getVariantComparison,
+  getOtariBudgets,
 } from '../services/experiment-service';
 
 const router = Router();
@@ -47,6 +49,16 @@ router.get('/:id', (req, res) => {
   res.json(experiment);
 });
 
+router.get('/:id/comparison', (req, res) => {
+  try {
+    const comparison = getVariantComparison(req.params.id);
+    res.json(comparison);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get comparison';
+    res.status(404).json({ error: message });
+  }
+});
+
 router.post('/:id/run', async (req, res) => {
   try {
     const { input } = z.object({ input: z.string() }).parse(req.body);
@@ -54,6 +66,16 @@ router.post('/:id/run', async (req, res) => {
     res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to run experiment';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/otari/budgets', async (_req, res) => {
+  try {
+    const budgets = await getOtariBudgets();
+    res.json(budgets);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch budgets';
     res.status(500).json({ error: message });
   }
 });

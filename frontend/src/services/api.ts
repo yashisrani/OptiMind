@@ -39,14 +39,22 @@ export async function getExperiment(id: string): Promise<Experiment> {
   return request<Experiment>(`/experiments/${id}`);
 }
 
+export async function getVariantComparison(id: string) {
+  return request(`/experiments/${id}/comparison`);
+}
+
 export async function runExperiment(
   id: string,
   input: string
-): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number }> {
+): Promise<{ response: string; variant: ExperimentVariant; latency: number; tokens: number; cost: number }> {
   return request(`/experiments/${id}/run`, {
     method: 'POST',
     body: JSON.stringify({ input }),
   });
+}
+
+export async function getOtariBudgets() {
+  return request('/experiments/otari/budgets');
 }
 
 export async function getUsage(startDate?: string, endDate?: string) {

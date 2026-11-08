@@ -25,19 +25,30 @@ export interface ChatCompletionResponse {
   };
 }
 
+export interface UsageDataPoint {
+  date: string;
+  model: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+}
+
 export interface UsageResponse {
-  data: Array<{
-    date: string;
-    model: string;
-    requests: number;
-    input_tokens: number;
-    output_tokens: number;
-    cost: number;
-  }>;
+  data: UsageDataPoint[];
   total: {
     requests: number;
     input_tokens: number;
     output_tokens: number;
     cost: number;
   };
+}
+
+export interface Budget {
+  id: string;
+  name: string;
+  limit: number;
+  spent: number;
+  period: 'daily' | 'weekly' | 'monthly';
+  status: 'green' | 'yellow' | 'red';
 }

@@ -1,4 +1,4 @@
-import type { ChatCompletionRequest, ChatCompletionResponse, UsageResponse } from '../types/otari';
+import type { ChatCompletionRequest, ChatCompletionResponse, UsageResponse, UsageDataPoint } from '../types/otari';
 
 const OTARI_BASE_URL = process.env.OTARI_BASE_URL || 'https://api.otari.ai/api/v1';
 const OTARI_API_KEY = process.env.OTARI_API_KEY || '';
@@ -35,4 +35,16 @@ export async function getUsage(startDate?: string, endDate?: string): Promise<Us
 
   const query = params.toString() ? `?${params.toString()}` : '';
   return request<UsageResponse>(`/usage${query}`);
+}
+
+export async function getUsageSeries(bucket: 'hour' | 'day' = 'day', startDate?: string, endDate?: string): Promise<UsageDataPoint[]> {
+  const params = new URLSearchParams({ bucket });
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+
+  return request<UsageDataPoint[]>(`/usage/series?${params.toString()}`);
+}
+
+export async function getBudgets(): Promise<Array<{ id: string; name: string; limit: number; spent: number; period: string }>> {
+  return request('/budgets');
 }
