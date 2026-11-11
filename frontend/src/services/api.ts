@@ -56,8 +56,9 @@ export async function getGuardrailRules(id?: string) {
   return request(endpoint);
 }
 
-export async function updateGuardrailRules(id: string, rules: any[]) {
-  return request(`/experiments/${id}/guardrails`, {
+export async function updateGuardrailRules(id: string = '', rules: any[]) {
+  const endpoint = id && id !== 'default' ? `/experiments/${id}/guardrails` : '/experiments/guardrails';
+  return request(endpoint, {
     method: 'PUT',
     body: JSON.stringify(rules),
   });
@@ -77,21 +78,13 @@ export async function searchPromptEngineeringTips(id: string) {
   return request(`/experiments/${id}/search/tips`);
 }
 
-export async function getTelemetryMetrics(startDate?: string, endDate?: string) {
+export async function getUsage(startDate?: string, endDate?: string) {
   const params = new URLSearchParams();
   if (startDate) params.set('startDate', startDate);
   if (endDate) params.set('endDate', endDate);
 
   const query = params.toString() ? `?${params.toString()}` : '';
-  return request(`/experiments/telemetry${query}`);
-}
-
-export async function getTraces(limit: number = 50) {
-  return request(`/experiments/traces?limit=${limit}`);
-}
-
-export async function getTraceById(traceId: string) {
-  return request(`/experiments/traces/${traceId}`);
+  return request(`/otari/usage${query}`);
 }
 
 export async function runExperiment(
@@ -108,11 +101,22 @@ export async function getOtariBudgets() {
   return request('/experiments/otari/budgets');
 }
 
-export async function getUsage(startDate?: string, endDate?: string) {
-  const params = new URLSearchParams();
-  if (startDate) params.set('startDate', startDate);
-  if (endDate) params.set('endDate', endDate);
+export async function autoOptimizeExperiment(id: string) {
+  return request(`/experiments/${id}/auto-optimize`, {
+    method: 'POST',
+  });
+}
 
-  const query = params.toString() ? `?${params.toString()}` : '';
-  return request(`/otari/usage${query}`);
+export async function compressPrompt(prompt: string, model: string) {
+  return request('/experiments/compress', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, model }),
+  });
+}
+
+export async function runModelBattle(systemPrompt: string, userInput: string, models?: string[]) {
+  return request('/experiments/battle', {
+    method: 'POST',
+    body: JSON.stringify({ systemPrompt, userInput, models }),
+  });
 }

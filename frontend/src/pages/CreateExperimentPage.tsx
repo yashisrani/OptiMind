@@ -15,14 +15,14 @@ export function CreateExperimentPage({ onCreated }: CreateExperimentPageProps) {
   const [description, setDescription] = useState('');
   const [budget, setBudget] = useState('10');
   const [variants, setVariants] = useState<Omit<ExperimentVariant, 'id'>[]>([
-    { name: 'Variant A', prompt: '', model: 'gpt-4o', temperature: 0.7 },
-    { name: 'Variant B', prompt: '', model: 'gpt-3.5-turbo', temperature: 0.7 },
+    { name: 'Variant A', prompt: '', model: 'alibaba/qwen3.8-flash', temperature: 0.7 },
+    { name: 'Variant B', prompt: '', model: 'deepseek/deepseek-v4-flash', temperature: 0.7 },
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const addVariant = () => {
-    setVariants([...variants, { name: `Variant ${String.fromCharCode(65 + variants.length)}`, prompt: '', model: 'gpt-4o', temperature: 0.7 }]);
+    setVariants([...variants, { name: `Variant ${String.fromCharCode(65 + variants.length)}`, prompt: '', model: 'alibaba/qwen3.8-flash', temperature: 0.7 }]);
   };
 
   const updateVariant = (index: number, field: keyof ExperimentVariant, value: string | number) => {
@@ -97,12 +97,49 @@ export function CreateExperimentPage({ onCreated }: CreateExperimentPageProps) {
                   onChange={(e) => updateVariant(index, 'model', e.target.value)}
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  <option value="gpt-4o">GPT-4o</option>
-                  <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                  <option value="gpt-4">GPT-4</option>
-                  <option value="claude-3-opus">Claude 3 Opus</option>
-                  <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                  <option value="claude-3-haiku">Claude 3 Haiku</option>
+                  <optgroup label="Alibaba Qwen">
+                    <option value="alibaba/qwen3.8-flash">Qwen 3.8 Flash</option>
+                    <option value="alibaba/qwen3.5-9b">Qwen 3.5 9B</option>
+                    <option value="alibaba/qwen3.6-35b-a3b">Qwen 3.6 35B A3B</option>
+                  </optgroup>
+                  
+                  <optgroup label="DeepSeek">
+                    <option value="deepseek/deepseek-v4-pro">DeepSeek V4 Pro</option>
+                    <option value="deepseek/deepseek-v4-flash">DeepSeek V4 Flash</option>
+                    <option value="deepseek/deepseek-v3">DeepSeek V3</option>
+                  </optgroup>
+                  
+                  <optgroup label="Meta Llama">
+                    <option value="meta/llama-4-scout-17b">Llama 4 Scout 17B</option>
+                    <option value="meta/llama-3.3-70b-instruct">Llama 3.3 70B Instruct</option>
+                    <option value="meta/llama-3.1-70b-instruct">Llama 3.1 70B Instruct</option>
+                  </optgroup>
+                  
+                  <optgroup label="Mistral">
+                    <option value="mistralai/mistral-small-4">Mistral Small 4</option>
+                    <option value="mistralai/mistral-large-latest">Mistral Large (Latest)</option>
+                    <option value="mistralai/ministral-3b-latest">Ministral 3B (Latest)</option>
+                  </optgroup>
+                  
+                  <optgroup label="Nvidia">
+                    <option value="nvidia/nemotron-3.5-super-vl-120b-a12b">Nemotron 3.5 Super VL 120B</option>
+                  </optgroup>
+                  
+                  <optgroup label="Xiaomi">
+                    <option value="xiaomi/mimo-v2.6-pro">MiMo V2.6 Pro</option>
+                  </optgroup>
+                  
+                  <optgroup label="Bytedance">
+                    <option value="bytedance/seed-2.0-pro">Seed 2.0 Pro</option>
+                  </optgroup>
+                  
+                  <optgroup label="NousResearch">
+                    <option value="nousresearch/hermes-4-405b">Hermes 4 405B</option>
+                  </optgroup>
+                  
+                  <optgroup label="OpenAI (Open Weight)">
+                    <option value="openai/gpt-oss-120b">GPT OSS 120B</option>
+                  </optgroup>
                 </select>
               </div>
               <div>

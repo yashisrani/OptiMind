@@ -160,14 +160,20 @@ export async function runExperiment(
     logModelSwitch(experimentId, variant.model, switchCandidate.model, 0);
   }
   
-  const modelCheck = checkModelGuardrail(variant.model);
+  const modelCheck = checkModelGuardrail(variant.model, experimentId);
   if (!modelCheck.allowed) {
     throw new Error(modelCheck.reason);
   }
 
-  const promptCheck = checkPromptGuardrail(variant.prompt);
+  const promptCheck = checkPromptGuardrail(variant.prompt, experimentId);
   if (!promptCheck.allowed) {
     throw new Error(promptCheck.reason);
+  }
+
+  // Also check the user input against prompt injection safety guardrails
+  const inputCheck = checkPromptGuardrail(input, experimentId);
+  if (!inputCheck.allowed) {
+    throw new Error(inputCheck.reason);
   }
 
   const startTime = Date.now();
@@ -179,7 +185,7 @@ export async function runExperiment(
       { role: 'user', content: input },
     ],
     temperature: variant.temperature,
-  });
+  }, 'xiaomi/mimo-v2.6-pro');
 
   const latency = Date.now() - startTime;
   const tokens = response.usage.total_tokens;
@@ -290,14 +296,64 @@ function updateResult(
   }
 }
 
-function calculateCost(usage: { prompt_tokens: number; completion_tokens: number }, model: string): number {
+export function calculateCost(usage: { prompt_tokens: number; completion_tokens: number }, model: string): number {
   const pricing: Record<string, { input: number; output: number }> = {
-    'gpt-4': { input: 30, output: 60 },
-    'gpt-4o': { input: 5, output: 15 },
-    'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-    'claude-3-opus': { input: 15, output: 75 },
-    'claude-3-sonnet': { input: 3, output: 15 },
-    'claude-3-haiku': { input: 0.25, output: 1.25 },
+    // DeepSeek
+    'deepseek/deepseek-v4-pro': { input: 0.27, output: 1.1 },
+    'deepseek/deepseek-chat': { input: 0.14, output: 0.28 },
+    'deepseek/deepseek-coder': { input: 0.14, output: 0.28 },
+    'deepseek/deepseek-reasoner': { input: 0.55, output: 2.19 },
+    
+    // Meta Llama
+    'meta-llama/Llama-3.1-70B-Instruct': { input: 0.59, output: 0.79 },
+    'meta-llama/Llama-3.1-8B-Instruct': { input: 0.05, output: 0.05 },
+    'meta-llama/Llama-3.2-3B-Instruct': { input: 0.03, output: 0.03 },
+    'meta-llama/Llama-3.2-1B-Instruct': { input: 0.01, output: 0.01 },
+    
+    // Qwen
+    'Qwen/Qwen2.5-72B-Instruct': { input: 0.35, output: 0.40 },
+    'Qwen/Qwen2.5-32B-Instruct': { input: 0.20, output: 0.20 },
+    'Qwen/Qwen2.5-Coder-32B-Instruct': { input: 0.20, output: 0.20 },
+    'Qwen/Qwen2.5-14B-Instruct': { input: 0.10, output: 0.10 },
+    
+    // Mistral
+    'mistral/mistral-large-latest': { input: 2.0, output: 6.0 },
+    'mistralai/Mistral-7B-Instruct-v0.3': { input: 0.05, output: 0.05 },
+    'mistralai/Mixtral-8x7B-Instruct-v0.1': { input: 0.24, output: 0.24 },
+    'mistralai/Mixtral-8x22B-Instruct-v0.1': { input: 0.90, output: 0.90 },
+    
+    // Microsoft Phi
+    'microsoft/Phi-3.5-mini-instruct': { input: 0.10, output: 0.10 },
+    'microsoft/Phi-3.5-moe-instruct': { input: 0.15, output: 0.15 },
+    'microsoft/Phi-3-medium-128k-instruct': { input: 0.50, output: 0.50 },
+    
+    // Google Gemma
+    'google/gemma-2-27b-it': { input: 0.20, output: 0.20 },
+    'google/gemma-2-9b-it': { input: 0.10, output: 0.10 },
+    'google/gemma-2-2b-it': { input: 0.05, output: 0.05 },
+    
+    // 01.AI Yi
+    '01-ai/Yi-1.5-34B-Chat': { input: 0.20, output: 0.20 },
+    '01-ai/Yi-1.5-9B-Chat': { input: 0.10, output: 0.10 },
+    '01-ai/Yi-1.5-6B-Chat': { input: 0.05, output: 0.05 },
+    
+    // InternLM
+    'internlm/internlm2_5-20b-chat': { input: 0.15, output: 0.15 },
+    'internlm/internlm2_5-7b-chat': { input: 0.08, output: 0.08 },
+    
+    // Xiaomi
+    'xiaomi/mimo-v2.6-pro': { input: 0.15, output: 0.30 },
+    
+    // OpenAI
+    'openai/gpt-4': { input: 30.0, output: 60.0 },
+    'openai/gpt-4o': { input: 5.0, output: 15.0 },
+    'openai/gpt-4o-mini': { input: 0.15, output: 0.60 },
+    'openai/gpt-3.5-turbo': { input: 0.50, output: 1.50 },
+    
+    // Anthropic
+    'anthropic/claude-3-opus': { input: 15.0, output: 75.0 },
+    'anthropic/claude-3-sonnet': { input: 3.0, output: 15.0 },
+    'anthropic/claude-3-haiku': { input: 0.25, output: 1.25 },
   };
 
   const modelPricing = pricing[model] || { input: 1, output: 2 };

@@ -10,9 +10,11 @@
     "dev:frontend": "vite",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mcp": "tsx backend/src/mcp-server.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@radix-ui/react-dialog": "^1.1.4",
     "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-progress": "^1.1.1",
@@ -26,6 +28,7 @@
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "exa-js": "^2.28.0",
     "express": "^4.19.2",
     "helmet": "^7.1.0",
     "lucide-react": "^0.468.0",

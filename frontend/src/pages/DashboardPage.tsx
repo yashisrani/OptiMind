@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory, analyzeExperiment, searchOptimizationTechniques, searchPromptEngineeringTips } from '@/services/api';
+import { listExperiments, runExperiment, getVariantComparison, getOptimizationSuggestions, getOptimizationHistory, analyzeExperiment, searchOptimizationTechniques, searchPromptEngineeringTips, autoOptimizeExperiment } from '@/services/api';
 import type { Experiment } from '../../../shared/src';
 
 interface VariantComparison {
@@ -38,9 +38,13 @@ export function DashboardPage() {
   const [tips, setTips] = useState<any>(null);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<{ response: string; variant: string; latency: number; tokens: number; cost: number } | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [searching, setSearching] = useState(false);
+  const [searchingTechniques, setSearchingTechniques] = useState(false);
+  const [searchingTips, setSearchingTips] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optResult, setOptResult] = useState<any>(null);
 
   useEffect(() => {
     loadExperiments();
@@ -93,27 +97,43 @@ export function DashboardPage() {
 
   const handleSearchTechniques = async () => {
     if (!selectedExperiment) return;
-    setSearching(true);
+    setSearchingTechniques(true);
     try {
       const data = await searchOptimizationTechniques(selectedExperiment.id);
       setTechniques(data);
     } catch (error) {
       console.error('Failed to search techniques:', error);
     } finally {
-      setSearching(false);
+      setSearchingTechniques(false);
     }
   };
 
   const handleSearchTips = async () => {
     if (!selectedExperiment) return;
-    setSearching(true);
+    setSearchingTips(true);
     try {
       const data = await searchPromptEngineeringTips(selectedExperiment.id);
       setTips(data);
     } catch (error) {
       console.error('Failed to search tips:', error);
     } finally {
-      setSearching(false);
+      setSearchingTips(false);
+    }
+  };
+
+  const handleAutoOptimize = async () => {
+    if (!selectedExperiment) return;
+    setOptimizing(true);
+    setOptResult(null);
+    try {
+      const res = await autoOptimizeExperiment(selectedExperiment.id);
+      setOptResult(res);
+      await loadExperiments();
+      await loadComparison(selectedExperiment.id);
+    } catch (error) {
+      console.error('Failed to auto-optimize:', error);
+    } finally {
+      setOptimizing(false);
     }
   };
 
@@ -125,11 +145,15 @@ export function DashboardPage() {
     setAnalysis(null);
     setTechniques(null);
     setTips(null);
+    setOptResult(null);
+    setRunError(null);
   };
 
   const handleRun = async () => {
     if (!selectedExperiment || !input) return;
     setLoading(true);
+    setRunError(null);
+    setResult(null);
     try {
       const res = await runExperiment(selectedExperiment.id, input);
       setResult({ response: res.response, variant: res.variant.name, latency: res.latency, tokens: res.tokens, cost: res.cost });
@@ -138,8 +162,9 @@ export function DashboardPage() {
       }
       await loadExperiments();
       await loadComparison(selectedExperiment.id);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error('Run experiment error:', err);
+      setRunError(err.message || 'Experiment execution failed');
     } finally {
       setLoading(false);
     }
@@ -263,6 +288,16 @@ export function DashboardPage() {
                 <Button onClick={handleRun} disabled={loading || !input}>
                   {loading ? 'Running...' : 'Run'}
                 </Button>
+
+                {runError && (
+                  <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <div>
+                      <p className="font-semibold text-xs uppercase tracking-wide">Otari Policy Enforcement</p>
+                      <p className="text-xs mt-0.5">{runError}</p>
+                    </div>
+                  </div>
+                )}
 
                 {result && (
                   <div className="space-y-3 pt-4 border-t">
@@ -482,6 +517,54 @@ export function DashboardPage() {
       )}
 
       {selectedExperiment && (
+        <Card className="mt-6 border-primary/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Self-Improvement Engine
+                  <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-800">Auto-Optimize</span>
+                </CardTitle>
+                <CardDescription>
+                  Automatically identifies the worst prompt, researches improvements via Exa, rewrites it, and deploys if better.
+                </CardDescription>
+              </div>
+              <Button onClick={handleAutoOptimize} disabled={optimizing}>
+                {optimizing ? 'Optimizing...' : 'Run Auto-Optimize'}
+              </Button>
+            </div>
+          </CardHeader>
+          {optResult && (
+            <CardContent className="space-y-4">
+              <div className={`p-4 rounded-lg ${optResult.optimized ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+                <h3 className="font-medium">
+                  {optResult.optimized ? 'Optimization Successful!' : 'No Improvement Found'}
+                </h3>
+                <p className="text-sm mt-1">
+                  {optResult.optimized 
+                    ? `Deployed new prompt. Saved $${(optResult.oldCost - optResult.newCost).toFixed(6)} per request.` 
+                    : 'The current prompt is already optimal.'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 rounded border border-border">
+                  <p className="text-xs text-muted-foreground mb-1">Old Prompt</p>
+                  <p className="text-sm font-mono bg-muted p-2 rounded truncate">{optResult.oldPrompt}</p>
+                  <p className="text-xs text-muted-foreground mt-2">Cost: ${optResult.oldCost.toFixed(6)}</p>
+                </div>
+                <div className="p-3 rounded border border-primary/50 bg-primary/5">
+                  <p className="text-xs text-primary mb-1">New Prompt (AI Generated)</p>
+                  <p className="text-sm font-mono bg-background p-2 rounded truncate">{optResult.newPrompt}</p>
+                  <p className="text-xs text-primary mt-2">Cost: ${optResult.newCost.toFixed(6)}</p>
+                </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {selectedExperiment && (
         <Card className="mt-6">
           <CardHeader>
             <div className="flex items-center justify-between mb-4">
@@ -490,11 +573,11 @@ export function DashboardPage() {
                 <CardDescription>Find optimization techniques via Otari Web Search</CardDescription>
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleSearchTechniques} disabled={searching} variant="outline">
-                  {searching ? 'Searching...' : 'Search Techniques'}
+                <Button onClick={handleSearchTechniques} disabled={searchingTechniques} variant="outline">
+                  {searchingTechniques ? 'Searching...' : 'Search Techniques'}
                 </Button>
-                <Button onClick={handleSearchTips} disabled={searching} variant="outline">
-                  {searching ? 'Searching...' : 'Search Tips'}
+                <Button onClick={handleSearchTips} disabled={searchingTips} variant="outline">
+                  {searchingTips ? 'Searching...' : 'Search Tips'}
                 </Button>
               </div>
             </div>
@@ -502,14 +585,17 @@ export function DashboardPage() {
           {techniques && (
             <CardContent className="mb-4">
               <h3 className="font-medium mb-3">Optimization Techniques</h3>
-              <p className="text-sm text-muted-foreground mb-3">Query: {techniques.query}</p>
+              <p className="text-sm text-muted-foreground mb-3 font-mono bg-muted/50 p-2 rounded">
+                Query: {techniques.query}
+              </p>
               <div className="space-y-3">
                 {techniques.techniques.map((tech: any, index: number) => (
-                  <div key={index} className="p-3 rounded-lg border border-border">
-                    <a href={tech.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
-                      {tech.title}
+                  <div key={index} className="p-3 rounded-lg border border-border bg-card hover:border-primary/40 transition-colors">
+                    <a href={tech.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline flex items-center gap-1.5">
+                      <span>{tech.title}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="10 14 11 9"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
                     </a>
-                    <p className="text-sm text-muted-foreground mt-1">{tech.summary}</p>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{tech.summary}</p>
                   </div>
                 ))}
               </div>
@@ -518,14 +604,17 @@ export function DashboardPage() {
           {tips && (
             <CardContent>
               <h3 className="font-medium mb-3">Prompt Engineering Tips for {tips.bestModel}</h3>
-              <p className="text-sm text-muted-foreground mb-3">Query: {tips.query}</p>
+              <p className="text-sm text-muted-foreground mb-3 font-mono bg-muted/50 p-2 rounded">
+                Query: {tips.query}
+              </p>
               <div className="space-y-3">
                 {tips.tips.map((tip: any, index: number) => (
-                  <div key={index} className="p-3 rounded-lg border border-border">
-                    <a href={tip.url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
-                      {tip.title}
+                  <div key={index} className="p-3 rounded-lg border border-border bg-card hover:border-primary/40 transition-colors">
+                    <a href={tip.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline flex items-center gap-1.5">
+                      <span>{tip.title}</span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="10 14 11 9"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
                     </a>
-                    <p className="text-sm text-muted-foreground mt-1">{tip.summary}</p>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{tip.summary}</p>
                   </div>
                 ))}
               </div>

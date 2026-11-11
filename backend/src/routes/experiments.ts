@@ -8,13 +8,16 @@ import {
   getVariantComparison,
   getOptimizationSuggestions,
   getOtariBudgets,
+  calculateCost,
 } from '../services/experiment-service';
-import { getOptimizationHistory } from '../services/optimization-history';
+import { getOptimizationHistory, logModelSwitch } from '../services/optimization-history';
 import { getGuardrailRules, updateGuardrailRules } from '../services/guardrails';
 import { analyzeExperiment } from '../services/analysis-service';
 import { searchOptimizationTechniques, searchPromptEngineeringTips } from '../services/search-service';
-import { getTelemetryMetrics } from '../services/telemetry-service';
-import { fetchTraces, fetchTraceDetail } from '../services/traces-service';
+import { chatCompletion } from '../services/otari-client';
+import { getDatabase } from '../services/database';
+import { runModelBattle } from '../services/battle-service';
+import { compressPrompt } from '../services/compression-service';
 
 const router = Router();
 
@@ -45,6 +48,91 @@ router.post('/', (req, res) => {
 router.get('/', (_req, res) => {
   const experiments = listExperiments();
   res.json(experiments);
+});
+
+// MCP Discovery endpoint
+router.get('/mcp/tools', (_req, res) => {
+  res.json({
+    name: 'optimind-mcp-server',
+    version: '1.0.0',
+    protocol: 'model-context-protocol',
+    tools: [
+      {
+        name: 'get_active_experiments',
+        description: 'Get all active AI optimization experiments, models, and spending metrics in OptiMind.',
+        endpoint: '/api/experiments',
+      },
+      {
+        name: 'get_experiment_metrics',
+        description: 'Get detailed Pareto efficiency and cost comparison for an experiment.',
+        endpoint: '/api/experiments/:id/comparison',
+      },
+      {
+        name: 'check_guardrail_policy',
+        description: 'Inspect active security guardrails, rate limits, and model whitelists enforced by Otari.',
+        endpoint: '/api/experiments/guardrails',
+      },
+      {
+        name: 'knowledge_prompt_techniques',
+        description: 'Fetch curated open-weight prompt optimization techniques and guidelines.',
+        endpoint: '/api/experiments/:id/search/techniques',
+      },
+    ],
+  });
+});
+
+router.get('/guardrails', (_req, res) => {
+  const rules = getGuardrailRules('global');
+  res.json(rules);
+});
+
+router.put('/guardrails', (req, res) => {
+  try {
+    updateGuardrailRules('global', req.body);
+    res.json({ success: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update guardrails';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/traces/:traceId', async (req, res) => {
+  try {
+    const trace = await fetchTraceDetail(req.params.traceId);
+    if (!trace) {
+      res.status(404).json({ error: 'Trace not found' });
+      return;
+    }
+    res.json(trace);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch trace';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/otari/budgets', async (_req, res) => {
+  try {
+    const budgets = await getOtariBudgets();
+    res.json(budgets);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch budgets';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post('/compress', async (req, res) => {
+  try {
+    const { prompt, model } = z.object({
+      prompt: z.string(),
+      model: z.string(),
+    }).parse(req.body);
+
+    const result = await compressPrompt(prompt, model);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to compress prompt';
+    res.status(500).json({ error: message });
+  }
 });
 
 router.get('/:id', (req, res) => {
@@ -84,11 +172,6 @@ router.get('/:id/history', (req, res) => {
     const message = error instanceof Error ? error.message : 'Failed to get history';
     res.status(500).json({ error: message });
   }
-});
-
-router.get('/guardrails', (_req, res) => {
-  const rules = getGuardrailRules();
-  res.json(rules);
 });
 
 router.get('/:id/guardrails', (req, res) => {
@@ -169,51 +252,6 @@ router.get('/:id/search/tips', async (req, res) => {
   }
 });
 
-router.get('/telemetry', async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query;
-    const metrics = await getTelemetryMetrics(
-      startDate as string | undefined,
-      endDate as string | undefined
-    );
-    
-    if (!metrics) {
-      res.status(500).json({ error: 'Failed to fetch telemetry' });
-      return;
-    }
-    
-    res.json(metrics);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to get telemetry';
-    res.status(500).json({ error: message });
-  }
-});
-
-router.get('/traces', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit as string) || 50;
-    const traces = await fetchTraces(limit);
-    res.json(traces);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch traces';
-    res.status(500).json({ error: message });
-  }
-});
-
-router.get('/traces/:traceId', async (req, res) => {
-  try {
-    const trace = await fetchTraceDetail(req.params.traceId);
-    if (!trace) {
-      res.status(404).json({ error: 'Trace not found' });
-      return;
-    }
-    res.json(trace);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch trace';
-    res.status(500).json({ error: message });
-  }
-});
-
 router.get('/:id/export', (req, res) => {
   const experiment = getExperiment(req.params.id);
   if (!experiment) {
@@ -246,17 +284,113 @@ router.post('/:id/run', async (req, res) => {
     const result = await runExperiment(req.params.id, input);
     res.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to run experiment';
+    let message = error instanceof Error ? error.message : 'Failed to run experiment';
+    
+    // Parse Otari guardrail errors into clean user-friendly messages
+    if (message.includes('guardrail') || message.includes('blocked') || message.includes('safety') || message.includes('prohibited')) {
+      try {
+        const jsonMatch = message.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          const detail = parsed.detail;
+          if (detail && typeof detail === 'object' && detail.message) {
+            const profile = detail.guardrails?.[0]?.profile ? ` (Profile: ${detail.guardrails[0].profile})` : '';
+            message = `${detail.message}${profile}`;
+          } else if (typeof detail === 'string') {
+            message = detail;
+          }
+        }
+      } catch {
+        // Fallback cleanup
+        message = message.replace(/Otari API error:\s*\d+\s*-\s*/, '');
+      }
+
+      res.status(403).json({ error: message, guardrailBlocked: true });
+      return;
+    }
+
     res.status(500).json({ error: message });
   }
 });
 
-router.get('/otari/budgets', async (_req, res) => {
+router.post('/:id/auto-optimize', async (req, res) => {
   try {
-    const budgets = await getOtariBudgets();
-    res.json(budgets);
+    const experiment = getExperiment(req.params.id);
+    if (!experiment) throw new Error('Experiment not found');
+
+    // 1. Find the worst performing variant
+    const worstResult = experiment.results.reduce((worst, curr) => 
+      (curr.successRate / (curr.totalCost || 1)) < (worst.successRate / (worst.totalCost || 1)) ? curr : worst
+    );
+    const worstVariant = experiment.variants.find(v => v.id === worstResult.variantId);
+    if (!worstVariant) throw new Error('No variants found');
+
+    // 2. Get optimization tips via Exa Web Search (limit to 2 short tips to save tokens)
+    const searchResults = await searchPromptEngineeringTips(req.params.id);
+    const tipsContext = searchResults.tips.slice(0, 2).map((t: any) => t.summary).join(' ');
+
+    // 3. Use LLM to rewrite the prompt with low-token prompt and fast model
+    const rewritePrompt = `Rewrite this prompt to be concise and token-efficient. Keep core instructions:\n"${worstVariant.prompt}"\nTips: ${tipsContext}\nReturn ONLY the rewritten prompt.`;
+
+    const rewriteResponse = await chatCompletion({
+      model: 'xiaomi/mimo-v2.6-pro',
+      messages: [{ role: 'user', content: rewritePrompt }],
+      max_tokens: 150,
+    });
+
+    const newPrompt = rewriteResponse.choices[0].message.content.trim();
+
+    // 4. Test the new prompt with minimal tokens
+    const testInput = "Quantum computing in 5 words.";
+    const startTime = Date.now();
+    
+    const newTestResponse = await chatCompletion({
+      model: 'xiaomi/mimo-v2.6-pro',
+      messages: [{ role: 'system', content: newPrompt }, { role: 'user', content: testInput }],
+      max_tokens: 50,
+    });
+    
+    const newLatency = Date.now() - startTime;
+    const newCost = calculateCost(newTestResponse.usage, worstVariant.model);
+    const oldCostPerReq = worstResult.requests > 0 ? worstResult.totalCost / worstResult.requests : 1;
+
+    // 5. Compare and Deploy if better
+    const isBetter = newCost < oldCostPerReq || newLatency < worstResult.avgLatency;
+
+    if (isBetter) {
+      const db = getDatabase();
+      db.prepare('UPDATE variants SET prompt = ? WHERE id = ?').run(newPrompt, worstVariant.id);
+      logModelSwitch(req.params.id, worstVariant.model, worstVariant.model, oldCostPerReq - newCost);
+    }
+
+    res.json({
+      success: true,
+      optimized: isBetter,
+      oldPrompt: worstVariant.prompt,
+      newPrompt: newPrompt,
+      oldCost: oldCostPerReq,
+      newCost: newCost,
+      latencyImprovement: Math.max(0, worstResult.avgLatency - newLatency),
+    });
+
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch budgets';
+    const message = error instanceof Error ? error.message : 'Failed to auto-optimize';
+    res.status(500).json({ error: message });
+  }
+});
+
+router.post('/battle', async (req, res) => {
+  try {
+    const { systemPrompt, userInput, models } = z.object({
+      systemPrompt: z.string(),
+      userInput: z.string(),
+      models: z.array(z.string()).optional(),
+    }).parse(req.body);
+
+    const result = await runModelBattle(systemPrompt, userInput, models);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to run battle';
     res.status(500).json({ error: message });
   }
 });
