@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 
 interface RoutingRule {
   id: string;
@@ -14,123 +13,77 @@ interface RoutingRule {
 
 const defaultRules: RoutingRule[] = [
   {
-    id: 'cost-optimized',
-    name: 'Cost Optimized',
-    primaryModel: 'gpt-3.5-turbo',
-    fallbackModels: ['gpt-4o-mini', 'claude-3-haiku'],
+    id: 'test',
+    name: 'Otari Active Policy (test)',
+    primaryModel: 'Qwen/Qwen3.8-Flash (DeepInfra)',
+    fallbackModels: ['deepseek-ai/DeepSeek-V4-Flash (DeepInfra)'],
     enabled: true,
-    description: 'Use cheapest model first, fallback to better models on failure',
+    description: 'Active Otari Gateway routing policy: primary fast Qwen model with automated DeepSeek-V4-Flash failover on error or rate-limit.',
   },
   {
     id: 'quality-first',
-    name: 'Quality First',
-    primaryModel: 'gpt-4o',
-    fallbackModels: ['claude-3-sonnet', 'gpt-4'],
+    name: 'Quality Reasoning Policy',
+    primaryModel: 'deepseek/deepseek-v4-pro',
+    fallbackModels: ['alibaba/qwen3.5-27b', 'xiaomi/mimo-v2.6-pro'],
     enabled: false,
-    description: 'Use best model first, fallback to alternatives on rate limits',
+    description: 'Use large open-weight reasoning models first, failover to mid-tier alternatives on latency spike.',
   },
   {
-    id: 'balanced',
-    name: 'Balanced',
-    primaryModel: 'gpt-4o-mini',
-    fallbackModels: ['claude-3-sonnet', 'gpt-4o'],
+    id: 'cost-optimized',
+    name: 'Budget Shield Policy',
+    primaryModel: 'xiaomi/mimo-v2.6-pro',
+    fallbackModels: ['alibaba/qwen3.8-flash', 'deepseek/deepseek-v4-flash'],
     enabled: false,
-    description: 'Balance cost and quality with mid-tier primary',
+    description: 'Ultra-low-cost token routing with automated fallback for mission-critical prompts.',
   },
 ];
 
 export function RoutingPage() {
-  const [rules, setRules] = useState<RoutingRule[]>(defaultRules);
-  const [saving, setSaving] = useState(false);
-
-  const toggleRule = (id: string) => {
-    setRules(rules.map(rule => 
-      rule.id === id ? { ...rule, enabled: !rule.enabled } : rule
-    ));
-  };
-
-  const updateRule = (id: string, field: keyof RoutingRule, value: any) => {
-    setRules(rules.map(rule => 
-      rule.id === id ? { ...rule, [field]: value } : rule
-    ));
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setSaving(false);
-    alert('Routing policies saved');
-  };
+  const [rules] = useState<RoutingRule[]>(defaultRules);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Routing Policies</h1>
-          <p className="text-muted-foreground mt-1">Configure multi-provider fallback chains via Otari</p>
-        </div>
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Policies'}
-        </Button>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Routing Policies</h1>
+        <p className="text-muted-foreground mt-1">
+          Multi-provider fallback chains managed via Otari Dashboard
+        </p>
       </div>
+
+      <Card className="mb-6 bg-blue-50 border-blue-200">
+        <CardContent className="py-4">
+          <p className="text-sm text-blue-900">
+            <strong>Note:</strong> Routing policies are configured in the Otari Dashboard (Routing → Policies). 
+            This page shows your current configuration. Changes must be made in Otari to take effect.
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="space-y-4">
         {rules.map(rule => (
-          <Card key={rule.id} className={rule.enabled ? 'border-primary/50' : ''}>
+          <Card key={rule.id} className={rule.enabled ? 'border-primary/50' : 'opacity-60'}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg">{rule.name}</CardTitle>
                   <CardDescription>{rule.description}</CardDescription>
                 </div>
-                <Button
-                  variant={rule.enabled ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => toggleRule(rule.id)}
-                >
-                  {rule.enabled ? 'Enabled' : 'Disabled'}
-                </Button>
+                <span className={`text-xs px-3 py-1 rounded ${
+                  rule.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {rule.enabled ? 'Active' : 'Inactive'}
+                </span>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {rule.enabled && (
-                <>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Primary Model</label>
-                    <select
-                      value={rule.primaryModel}
-                      onChange={(e) => updateRule(rule.id, 'primaryModel', e.target.value)}
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm"
-                    >
-                      <option value="gpt-4o">GPT-4o</option>
-                      <option value="gpt-4o-mini">GPT-4o Mini</option>
-                      <option value="gpt-4">GPT-4</option>
-                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                      <option value="claude-3-opus">Claude 3 Opus</option>
-                      <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                      <option value="claude-3-haiku">Claude 3 Haiku</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">Fallback Models (comma-separated)</label>
-                    <Input
-                      value={rule.fallbackModels.join(', ')}
-                      onChange={(e) => updateRule(rule.id, 'fallbackModels', e.target.value.split(',').map(s => s.trim()))}
-                      placeholder="gpt-4o, claude-3-sonnet"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Otari will try these models in order if the primary fails
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                    <p className="text-sm text-blue-900">
-                      <strong>Routing Flow:</strong> {rule.primaryModel} → {rule.fallbackModels.join(' → ')}
-                    </p>
-                  </div>
-                </>
-              )}
+            <CardContent>
+              <div className="p-3 rounded-lg bg-muted">
+                <p className="text-sm">
+                  <strong>Routing Flow:</strong> {rule.primaryModel} → {rule.fallbackModels.join(' → ')}
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  If {rule.primaryModel} fails (rate limit, error, budget), Otari automatically tries the next model in the chain.
+                </p>
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -148,19 +101,19 @@ export function RoutingPage() {
             </li>
             <li className="flex gap-2">
               <span className="font-bold">2.</span>
-              <span>Otari checks the routing policy for your workspace</span>
+              <span>Otari checks the routing policy configured in the dashboard</span>
             </li>
             <li className="flex gap-2">
               <span className="font-bold">3.</span>
-              <span>If the primary model fails (rate limit, error, budget), Otari automatically tries the next fallback</span>
+              <span>If the primary model fails, Otari automatically tries the next fallback</span>
             </li>
             <li className="flex gap-2">
               <span className="font-bold">4.</span>
-              <span>The response comes back with the actual model used in the `model` field</span>
+              <span>The response includes the actual model used in the `model` field</span>
             </li>
             <li className="flex gap-2">
               <span className="font-bold">5.</span>
-              <span>All usage is tracked in Otari's dashboard with the actual provider and model</span>
+              <span>All usage is tracked in Otari's dashboard with the actual provider</span>
             </li>
           </ul>
         </CardContent>

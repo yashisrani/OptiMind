@@ -1,31 +1,63 @@
 import type { ChatCompletionRequest, ChatCompletionResponse, UsageResponse, UsageDataPoint } from '../types/otari';
 
-const OTARI_BASE_URL = process.env.OTARI_BASE_URL || 'https://api.otari.ai/api/v1';
-const OTARI_API_KEY = process.env.OTARI_API_KEY || '';
+function getConfig() {
+  return {
+    baseUrl: process.env.OTARI_BASE_URL || 'https://api.otari.ai/api/v1',
+    apiKey: process.env.OTARI_API_KEY || '',
+  };
+}
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${OTARI_BASE_URL}${endpoint}`, {
+  const { baseUrl, apiKey } = getConfig();
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  };
+
+  if (options.headers) {
+    Object.assign(headers, options.headers as Record<string, string>);
+  }
+
+  console.log('Otari Request:', {
+    url: `${baseUrl}${endpoint}`,
+    hasApiKey: !!apiKey,
+    apiKeyLength: apiKey?.length || 0,
+    headers: Object.keys(headers),
+  });
+
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OTARI_API_KEY}`,
-      ...options.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Otari API error: ${response.status} - ${error}`);
+    const errorText = await response.text();
+    console.error(`Otari API Error [${response.status}]:`, errorText);
+    throw new Error(`Otari API error: ${response.status} - ${errorText}`);
   }
 
   return response.json();
 }
 
-export async function chatCompletion(body: ChatCompletionRequest): Promise<ChatCompletionResponse> {
-  return request<ChatCompletionResponse>('/chat/completions', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
+export async function chatCompletion(body: ChatCompletionRequest, fallbackModel?: string): Promise<ChatCompletionResponse> {
+  try {
+    return await request<ChatCompletionResponse>('/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    const msg = (error as Error).message || '';
+    const isRecoverable = msg.includes('504') || msg.includes('502') || msg.includes('500') || msg.includes('424') || msg.includes('400');
+    if (fallbackModel && isRecoverable) {
+      console.log(`Primary model ${body.model} failed (${msg.substring(0, 40)}...), falling back to ${fallbackModel}`);
+      return request<ChatCompletionResponse>('/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ ...body, model: fallbackModel }),
+      });
+    }
+    throw error;
+  }
 }
 
 export async function getUsage(startDate?: string, endDate?: string): Promise<UsageResponse> {
@@ -50,10 +82,14 @@ export async function getBudgets(): Promise<Array<{ id: string; name: string; li
 }
 
 export async function executeCode(code: string, container?: string): Promise<{ output: string; exit_code: number }> {
-  return request('/code/execute', {
+  const res = await request<any>('/code/execute', {
     method: 'POST',
     body: JSON.stringify({ code, container }),
   });
+  return {
+    output: res.stdout ?? res.output ?? '',
+    exit_code: res.return_code ?? res.exit_code ?? 0,
+  };
 }
 
 export async function webSearch(query: string): Promise<{ results: Array<{ title: string; url: string; snippet: string }> }> {

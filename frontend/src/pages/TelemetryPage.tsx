@@ -55,7 +55,21 @@ export function TelemetryPage() {
   }
 
   if (!metrics) {
-    return <div className="container mx-auto px-4 py-8">Failed to load telemetry. Ensure Otari API key is configured.</div>;
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-6">Agent Telemetry</h1>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-2">No telemetry data available yet.</p>
+            <p className="text-sm text-muted-foreground">
+              Telemetry data appears when coding agents (like Claude Code) run through Otari.
+              <br />
+              The API is connected and ready to display metrics once agent activity is recorded.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (

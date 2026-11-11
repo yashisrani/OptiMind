@@ -50,10 +50,11 @@ export function GuardrailsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateGuardrailRules('default', rules);
-      alert('Guardrails updated');
-    } catch (error) {
-      alert('Failed to update guardrails');
+      await updateGuardrailRules('', rules);
+      alert('Guardrails successfully saved!');
+    } catch (error: any) {
+      console.error('Save guardrails error:', error);
+      alert(`Failed to update guardrails: ${error.message || 'Server error'}`);
     } finally {
       setSaving(false);
     }

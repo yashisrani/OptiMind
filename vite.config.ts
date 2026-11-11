@@ -12,6 +12,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    watch: {
+      ignored: ['**/*.db*', '**/*.db-wal', '**/*.db-shm'],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

@@ -1,4 +1,5 @@
 import type { Experiment } from '../../shared/src';
+import { getDatabase } from './database';
 
 export interface GuardrailRule {
   id: string;
@@ -26,7 +27,7 @@ const defaultRules: GuardrailRule[] = [
     type: 'model_restriction',
     enabled: false,
     config: {
-      allowedModels: ['gpt-4o', 'gpt-3.5-turbo', 'claude-3-haiku'],
+      allowedModels: ['xiaomi/mimo-v2.6-pro', 'alibaba/qwen3.5-27b', 'deepseek/deepseek-v4-pro'],
     },
   },
   {
@@ -42,22 +43,65 @@ const defaultRules: GuardrailRule[] = [
     type: 'prompt_safety',
     enabled: true,
     config: {
-      blockedPatterns: ['ignore previous instructions', 'you are now', 'jailbreak'],
+      blockedPatterns: ['ignore previous instructions', 'ignore all previous', 'you are now', 'jailbreak', 'DAN mode'],
     },
   },
 ];
 
-const experimentRules = new Map<string, GuardrailRule[]>();
-
-export function getGuardrailRules(experimentId?: string): GuardrailRule[] {
-  if (experimentId) {
-    return experimentRules.get(experimentId) || defaultRules;
+export function getGuardrailRules(experimentId: string = 'global'): GuardrailRule[] {
+  try {
+    const db = getDatabase();
+    const rows = db.prepare('SELECT * FROM guardrail_rules WHERE experiment_id = ?').all(experimentId) as any[];
+    
+    if (rows && rows.length > 0) {
+      return rows.map(r => ({
+        id: r.id,
+        type: r.type,
+        enabled: Boolean(r.enabled),
+        config: JSON.parse(r.config || '{}'),
+      }));
+    }
+  } catch (err) {
+    console.warn('Error reading guardrails from db:', err);
   }
   return defaultRules;
 }
 
-export function updateGuardrailRules(experimentId: string, rules: GuardrailRule[]): void {
-  experimentRules.set(experimentId, rules);
+export function updateGuardrailRules(experimentId: string = 'global', rules: GuardrailRule[]): void {
+  try {
+    const db = getDatabase();
+    // Ensure table without strict foreign key failure for 'global'
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS guardrail_rules (
+        id TEXT PRIMARY KEY,
+        experiment_id TEXT,
+        type TEXT NOT NULL,
+        enabled INTEGER DEFAULT 1,
+        config TEXT
+      );
+    `);
+
+    const upsert = db.prepare(`
+      INSERT INTO guardrail_rules (id, experiment_id, type, enabled, config)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        experiment_id = excluded.experiment_id,
+        type = excluded.type,
+        enabled = excluded.enabled,
+        config = excluded.config
+    `);
+
+    const transaction = db.transaction(() => {
+      for (const rule of rules) {
+        upsert.run(rule.id, experimentId, rule.type, rule.enabled ? 1 : 0, JSON.stringify(rule.config || {}));
+      }
+    });
+
+    transaction();
+  } catch (error) {
+    console.error('Failed to save guardrail rules to DB:', error);
+    throw error;
+  }
 }
 
 export function checkBudgetGuardrail(experiment: Experiment): { allowed: boolean; reason?: string } {
@@ -77,8 +121,8 @@ export function checkBudgetGuardrail(experiment: Experiment): { allowed: boolean
   return { allowed: true };
 }
 
-export function checkModelGuardrail(model: string): { allowed: boolean; reason?: string } {
-  const rules = getGuardrailRules();
+export function checkModelGuardrail(model: string, experimentId?: string): { allowed: boolean; reason?: string } {
+  const rules = getGuardrailRules(experimentId);
   const modelRule = rules.find(r => r.type === 'model_restriction' && r.enabled);
   
   if (!modelRule) return { allowed: true };
@@ -90,8 +134,8 @@ export function checkModelGuardrail(model: string): { allowed: boolean; reason?:
   return { allowed: true };
 }
 
-export function checkPromptGuardrail(prompt: string): { allowed: boolean; reason?: string } {
-  const rules = getGuardrailRules();
+export function checkPromptGuardrail(prompt: string, experimentId?: string): { allowed: boolean; reason?: string } {
+  const rules = getGuardrailRules(experimentId);
   const safetyRule = rules.find(r => r.type === 'prompt_safety' && r.enabled);
   
   if (!safetyRule) return { allowed: true };
@@ -102,7 +146,7 @@ export function checkPromptGuardrail(prompt: string): { allowed: boolean; reason
   );
   
   if (blockedPattern) {
-    return { allowed: false, reason: `Prompt contains blocked pattern: ${blockedPattern}` };
+    return { allowed: false, reason: `Prompt blocked by Otari Policy: contains prohibited pattern "${blockedPattern}"` };
   }
   
   return { allowed: true };

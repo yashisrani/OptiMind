@@ -63,8 +63,7 @@ function initializeDatabase(): void {
       experiment_id TEXT,
       type TEXT NOT NULL,
       enabled INTEGER DEFAULT 1,
-      config TEXT,
-      FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE
+      config TEXT
     );
   `);
 }
